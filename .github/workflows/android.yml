@@ -11,7 +11,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
       with:
-        repository: ioioioion/mrmc
+        repository: jjm2473/mrmc
         ref: mrmc-release_3.9.6
         fetch-depth: 1
 
