@@ -1,0 +1,84 @@
+name: C/C++ CI
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        repository: MrMC/mrmc
+        ref: mrmc-release_3.9.6
+        fetch-depth: 1
+
+    - name: Space cleanup
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+          docker rmi `docker images -q`
+          sudo rm -rf /usr/share/dotnet /etc/mysql /etc/php /etc/apt/sources.list.d
+          sudo -E apt-get -y purge azure-cli ghc* zulu* hhvm llvm* firefox google* dotnet* powershell openjdk* mysql* php*
+          sudo -E apt-get update
+          sudo -E apt-get -y install build-essential asciidoc binutils bzip2 gawk gettext git libncurses5-dev libz-dev patch python3 unzip zlib1g-dev lib32gcc1 libc6-dev-i386 subversion flex uglifyjs gcc-multilib g++-multilib p7zip p7zip-full msmtp libssl-dev texinfo libglib2.0-dev xmlto qemu-utils upx libelf-dev autoconf automake libtool autopoint device-tree-compiler
+          sudo -E apt-get -y autoremove --purge
+          sudo -E apt-get clean
+          df -h
+    - name: Set up JDK 1.8
+      uses: actions/setup-java@v1
+      with:
+        java-version: 1.8
+    - name: Set up sdk
+      run: |
+         sudo apt-get update && sudo apt-get install lib32stdc++6 lib32z1 lib32z1-dev
+         sudo apt-get install build-essential git curl libcurl4-openssl-dev autoconf \
+         unzip zip zlib1g-dev gawk gperf cmake
+         sudo -E apt-get -y autoremove --purge
+         sudo -E apt-get clean
+         mkdir /opt/android-sdk-linux
+         cd /opt/android-sdk-linux
+         wget https://dl.google.com/android/repository/commandlinetools-linux-6200805_latest.zip
+         unzip commandlinetools-linux-6200805_latest.zip
+         rm commandlinetools-linux-6200805_latest.zip
+         cd tools/bin
+         echo "y" | ./sdkmanager  platform-tools --sdk_root=/opt/android-sdk-linux
+         ./sdkmanager  "platforms;android-26" --sdk_root=/opt/android-sdk-linux
+         ./sdkmanager "build-tools;26.0.2" --sdk_root=/opt/android-sdk-linux
+         ./sdkmanager "cmake;3.6.4111459" --sdk_root=/opt/android-sdk-linux
+         ./sdkmanager tools --sdk_root=/opt/android-sdk-linux
+    - name: Set up NDK
+      run: |
+         cd /opt
+         wget https://dl.google.com/android/repository/android-ndk-r20b-linux-x86_64.zip
+         unzip android-ndk-r20b-linux-x86_64.zip
+         rm android-ndk-r20b-linux-x86_64.zip
+    - name: Issue key
+      run: |
+         keytool -genkey -keystore $GITHUB_WORKSPACE/MrMC.keystore -v -alias \
+         androiddebugkey -dname "CN=Android Debug,O=Android,C=US" -keypass \
+         android -storepass android -keyalg RSA -keysize 2048 -validity 10000
+    - name: make dep
+      run: |
+         cd $GITHUB_WORKSPACE/tools/depends
+         ./bootstrap
+         ./configure --with-tarballs=/opt/xbmc-tarballs --host=arm-linux-androideabi --with-sdk-path=/opt/android-sdk-linux --with-sdk=android-21 --with-ndk-path=/opt/android-ndk-r20b --with-ndk-api=21 --prefix=/opt/xbmc-depends
+         make -j8
+         df -h
+    - name: make apk
+      run: |
+         cd $GITHUB_WORKSPACE
+         make -C tools/depends/target/xbmc
+         make
+         make apk
+         df -h
+    - name: Upload artifact
+      uses: actions/upload-artifact@v1.0.0
+      with:
+        # Artifact name
+        name: MrMC Apk
+        # Directory containing files to upload
+        path: ./MrMCapp-armeabi-v7a-debug.apk
+
